@@ -15,25 +15,27 @@ const (
 )
 
 type XMLReader struct {
-	root    string
-	element string
-	state   int
-	d       *xml.Decoder
+	roots    []string
+	elements []string
+	state    int
+	d        *xml.Decoder
 }
 
 func NewXMLReader(td *spec.Table, d *xml.Decoder) XMLReader {
+	roots := append([]string{td.Root}, td.RootAliases...)
+	elements := append([]string{td.Element}, td.ElementAliases...)
 	return XMLReader{
-		root:    td.Root,
-		element: td.Element,
-		state:   startRoot,
-		d:       d,
+		roots:    roots,
+		elements: elements,
+		state:    startRoot,
+		d:        d,
 	}
 }
 
 func (s *XMLReader) Read() (map[string]string, error) {
 	d := s.d
-	root := s.root
-	element := s.element
+	roots := s.roots
+	elements := s.elements
 
 	item := make(map[string]string)
 	var fieldName string
@@ -49,8 +51,8 @@ func (s *XMLReader) Read() (map[string]string, error) {
 			switch t := tok.(type) {
 			case xml.StartElement:
 				name := xml.StartElement(t).Name.Local
-				if name != root {
-					return item, fmt.Errorf("[%d] expected start of %s, got %s", s.state, root, name)
+				if !contains(roots, name) {
+					return item, fmt.Errorf("[%d] expected start of %v, got %s", s.state, roots, name)
 				}
 				s.state = startItemOrEndRoot
 			default: // ignore
@@ -59,14 +61,14 @@ func (s *XMLReader) Read() (map[string]string, error) {
 			switch t := tok.(type) {
 			case xml.StartElement:
 				name := xml.StartElement(t).Name.Local
-				if name != element {
-					return item, fmt.Errorf("[%d] expected start of %s, got %s", s.state, element, name)
+				if !contains(elements, name) {
+					return item, fmt.Errorf("[%d] expected start of %v, got %s", s.state, elements, name)
 				}
 				s.state = startFieldOrEndItem
 			case xml.EndElement:
 				name := xml.EndElement(t).Name.Local
-				if name != root {
-					return item, fmt.Errorf("[%d] expected start of %s, got %s", s.state, root, name)
+				if !contains(roots, name) {
+					return item, fmt.Errorf("[%d] expected end of %v, got %s", s.state, roots, name)
 				}
 				s.state = finished
 			default: // ignore
@@ -79,8 +81,8 @@ func (s *XMLReader) Read() (map[string]string, error) {
 				s.state = fieldValueOrEndField
 			case xml.EndElement:
 				name := xml.EndElement(t).Name.Local
-				if name != element {
-					return item, fmt.Errorf("[%d] expected end of %s, got %s", s.state, element, name)
+				if !contains(elements, name) {
+					return item, fmt.Errorf("[%d] expected end of %v, got %s", s.state, elements, name)
 				}
 				s.state = startItemOrEndRoot
 				return item, nil
@@ -111,4 +113,13 @@ func (s *XMLReader) Read() (map[string]string, error) {
 			}
 		}
 	}
+}
+
+func contains(values []string, candidate string) bool {
+	for _, v := range values {
+		if v == candidate {
+			return true
+		}
+	}
+	return false
 }

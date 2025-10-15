@@ -1,7 +1,13 @@
-root: Marktrollen
+root: MarktakteureUndRollen
 element: Marktrolle
 primary: MastrNummer
 without_rowid: true
+prefixes:
+  - Marktrollen
+root_aliases:
+  - Marktrollen
+element_aliases:
+  - MarktakteurUndRolle
 fields:
   - name: MarktakteurMastrNummer
     references:

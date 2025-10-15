@@ -25,60 +25,73 @@ func Xsd2SqliteType(xsd string) (string, bool) {
 }
 
 type Fields struct {
-	fields map[string]uint
-	typ    map[string]string
+	order []string
+	pos   map[string]int
+	typ   map[string]string
 }
 
 func NewFields(fields []spec.Field) (*Fields, error) {
-	f := make(map[string]uint)
-	t := make(map[string]string)
+	order := make([]string, len(fields))
+	pos := make(map[string]int)
+	typ := make(map[string]string)
 	for i, field := range fields {
-		typ, ok := Xsd2SqliteType(field.Xsd)
+		t, ok := Xsd2SqliteType(field.Xsd)
 		if !ok {
 			return nil, fmt.Errorf(unknownXsdType, field.Xsd)
 		}
-		f[field.Name] = uint(i)
-		t[field.Name] = typ
+		order[i] = field.Name
+		pos[field.Name] = i
+		typ[field.Name] = t
 	}
-	return &Fields{fields: f, typ: t}, nil
+	return &Fields{order: order, pos: pos, typ: typ}, nil
 }
 
 func (f *Fields) Header() []string {
-	n := len(f.fields)
-	result := make([]string, n, n)
-	for name, i := range f.fields {
-		result[i] = name
-	}
+	result := make([]string, len(f.order))
+	copy(result, f.order)
 	return result
 }
 
+func (f *Fields) EnsureField(name, sqlType string) (bool, string) {
+	if _, ok := f.pos[name]; ok {
+		if sqlType != "" && f.typ[name] == "" {
+			f.typ[name] = sqlType
+		}
+		return false, f.typ[name]
+	}
+	typ := sqlType
+	if typ == "" {
+		typ = "text"
+	}
+	f.pos[name] = len(f.order)
+	f.order = append(f.order, name)
+	f.typ[name] = typ
+	return true, typ
+}
+
 func (f *Fields) Record(item map[string]string) ([]interface{}, error) {
-	n := len(f.fields)
-	result := make([]interface{}, n, n)
-	for name, value := range item {
+	result := make([]interface{}, len(f.order))
+	for idx, name := range f.order {
+		value, ok := item[name]
+		if !ok || value == "" {
+			result[idx] = nil
+			continue
+		}
 		switch f.typ[name] {
 		case "integer":
-			if value == "" {
-				result[f.fields[name]] = nil
-				continue
-			}
 			v, err := strconv.Atoi(value)
 			if err != nil {
 				return result, err
 			}
-			result[f.fields[name]] = v
+			result[idx] = v
 		case "real":
-			if value == "" {
-				result[f.fields[name]] = nil
-				continue
-			}
 			v, err := strconv.ParseFloat(value, 64)
 			if err != nil {
 				return result, err
 			}
-			result[f.fields[name]] = v
+			result[idx] = v
 		case "text", "":
-			result[f.fields[name]] = value
+			result[idx] = value
 		default:
 			return nil, fmt.Errorf(unknownXsdType, f.typ[name])
 		}

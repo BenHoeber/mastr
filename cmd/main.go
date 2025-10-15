@@ -122,7 +122,7 @@ func mainWithError() error {
 
 			for _, xmlFile := range r.File {
 				name := xmlFile.FileHeader.Name
-				if !strings.HasPrefix(name, ed.Prefix) {
+				if !hasAnyPrefix(name, ed.Prefixes) {
 					continue
 				}
 				if err = func() error {
@@ -200,6 +200,15 @@ func leaveFile(recs []internal.Recorder) error {
 		}
 	}
 	return nil
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func processFile(recs []internal.Recorder, f io.Reader, td *spec.Table) (int, error) {
