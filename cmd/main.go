@@ -204,11 +204,27 @@ func leaveFile(recs []internal.Recorder) error {
 
 func hasAnyPrefix(s string, prefixes []string) bool {
 	for _, prefix := range prefixes {
-		if strings.HasPrefix(s, prefix) {
+		if hasQualifiedPrefix(s, prefix) {
 			return true
 		}
 	}
 	return false
+}
+
+func hasQualifiedPrefix(s, prefix string) bool {
+	if !strings.HasPrefix(s, prefix) {
+		return false
+	}
+	if len(s) == len(prefix) {
+		return true
+	}
+	next := s[len(prefix)]
+	switch next {
+	case '_', '-', '.', '/', '\\':
+		return true
+	default:
+		return false
+	}
 }
 
 func processFile(recs []internal.Recorder, f io.Reader, td *spec.Table) (int, error) {
