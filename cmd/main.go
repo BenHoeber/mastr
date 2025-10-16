@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"golang.org/x/net/html/charset"
+	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
 	"io"
 	"io/ioutil"
@@ -234,7 +235,7 @@ func hasQualifiedPrefix(s, prefix string) bool {
 	}
 }
 
-func fileMatchesTable(dec *unicode.Decoder, xmlFile *zip.File, td *spec.Table) (bool, error) {
+func fileMatchesTable(dec *encoding.Decoder, xmlFile *zip.File, td *spec.Table) (bool, error) {
 	f, err := xmlFile.Open()
 	if err != nil {
 		return false, fmt.Errorf("failed to open xml file %s: %w", xmlFile.Name, err)
