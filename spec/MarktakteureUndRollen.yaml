@@ -12,7 +12,7 @@ fields:
   - name: MarktakteurMastrNummer
     references:
       table: Marktakteur
-      column: Id
+      column: MastrNummer
   - name: DatumLetzteAktualisierung
     xsd: dateTime
   - name: MastrNummer

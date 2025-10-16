@@ -125,6 +125,13 @@ func mainWithError() error {
 				if !hasAnyPrefix(name, ed.Prefixes) {
 					continue
 				}
+				matches, err := fileMatchesTable(dec, xmlFile, &ed.Table)
+				if err != nil {
+					return fmt.Errorf("failed to inspect xml file %s: %w", name, err)
+				}
+				if !matches {
+					continue
+				}
 				if err = func() error {
 					if err := enterFile(recs, name); err != nil {
 						return fmt.Errorf("failed to enter file: %s", err)
@@ -225,6 +232,57 @@ func hasQualifiedPrefix(s, prefix string) bool {
 	default:
 		return false
 	}
+}
+
+func fileMatchesTable(dec *unicode.Decoder, xmlFile *zip.File, td *spec.Table) (bool, error) {
+	f, err := xmlFile.Open()
+	if err != nil {
+		return false, fmt.Errorf("failed to open xml file %s: %w", xmlFile.Name, err)
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("%v", err)
+		}
+	}()
+
+	reader := dec.Reader(f)
+	if _, err := io.CopyN(io.Discard, reader, int64(len("<?xml version='1.0' encoding='UTF-16'?>"))); err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	d := xml.NewDecoder(reader)
+	d.CharsetReader = charset.NewReaderLabel
+
+	for {
+		tok, err := d.Token()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return false, nil
+			}
+			return false, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			name := xml.StartElement(t).Name.Local
+			if matchesRoot(td, name) {
+				return true, nil
+			}
+			return false, nil
+		default:
+			// Ignore processing instructions, comments and whitespace before the root element.
+		}
+	}
+}
+
+func matchesRoot(td *spec.Table, candidate string) bool {
+	if td.Root == candidate {
+		return true
+	}
+	for _, alias := range td.RootAliases {
+		if alias == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func processFile(recs []internal.Recorder, f io.Reader, td *spec.Table) (int, error) {
