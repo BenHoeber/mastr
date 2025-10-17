@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"golang.org/x/net/html/charset"
+	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"
 	"io"
 	"io/ioutil"
@@ -122,7 +123,14 @@ func mainWithError() error {
 
 			for _, xmlFile := range r.File {
 				name := xmlFile.FileHeader.Name
-				if !strings.HasPrefix(name, ed.Prefix) {
+				if !hasAnyPrefix(name, ed.Prefixes) {
+					continue
+				}
+				matches, err := fileMatchesTable(dec, xmlFile, &ed.Table)
+				if err != nil {
+					return fmt.Errorf("failed to inspect xml file %s: %w", name, err)
+				}
+				if !matches {
 					continue
 				}
 				if err = func() error {
@@ -200,6 +208,82 @@ func leaveFile(recs []internal.Recorder) error {
 		}
 	}
 	return nil
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if hasQualifiedPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasQualifiedPrefix(s, prefix string) bool {
+	if !strings.HasPrefix(s, prefix) {
+		return false
+	}
+	if len(s) == len(prefix) {
+		return true
+	}
+	next := s[len(prefix)]
+	switch next {
+	case '_', '-', '.', '/', '\\':
+		return true
+	default:
+		return false
+	}
+}
+
+func fileMatchesTable(dec *encoding.Decoder, xmlFile *zip.File, td *spec.Table) (bool, error) {
+	f, err := xmlFile.Open()
+	if err != nil {
+		return false, fmt.Errorf("failed to open xml file %s: %w", xmlFile.Name, err)
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("%v", err)
+		}
+	}()
+
+	reader := dec.Reader(f)
+	if _, err := io.CopyN(io.Discard, reader, int64(len("<?xml version='1.0' encoding='UTF-16'?>"))); err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	d := xml.NewDecoder(reader)
+	d.CharsetReader = charset.NewReaderLabel
+
+	for {
+		tok, err := d.Token()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return false, nil
+			}
+			return false, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			name := xml.StartElement(t).Name.Local
+			if matchesRoot(td, name) {
+				return true, nil
+			}
+			return false, nil
+		default:
+			// Ignore processing instructions, comments and whitespace before the root element.
+		}
+	}
+}
+
+func matchesRoot(td *spec.Table, candidate string) bool {
+	if td.Root == candidate {
+		return true
+	}
+	for _, alias := range td.RootAliases {
+		if alias == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func processFile(recs []internal.Recorder, f io.Reader, td *spec.Table) (int, error) {

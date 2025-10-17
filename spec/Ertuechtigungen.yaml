@@ -1,5 +1,9 @@
 root: Ertuechtigungen
-element: Ertuechtigungen # docs say Ertuechtigung
+root_aliases:
+  - Ertuechtigung
+element: Ertuechtigung
+element_aliases:
+  - Ertuechtigungen
 primary: Id
 fields:
   - name: Id

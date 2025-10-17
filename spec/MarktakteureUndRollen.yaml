@@ -1,12 +1,18 @@
-root: Marktrollen
-element: Marktrolle
+root: MarktakteureUndRollen
+element: MarktakteurUndRolle
 primary: MastrNummer
 without_rowid: true
+prefixes:
+  - Marktrollen
+root_aliases:
+  - Marktrollen
+element_aliases:
+  - Marktrolle
 fields:
   - name: MarktakteurMastrNummer
     references:
       table: Marktakteur
-      column: Id
+      column: MastrNummer
   - name: DatumLetzteAktualisierung
     xsd: dateTime
   - name: MastrNummer

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 	"text/template"
 
 	"crawshaw.io/sqlite"
@@ -108,20 +109,7 @@ create table "{{.Name}}" (
 	}
 	w.fields = fields
 
-	headers := w.fields.Header()
-	columns := headers[0]
-	placeholders := "?"
-	for _, header := range headers[1:] {
-		columns = fmt.Sprintf("%s, %s", columns, header)
-		placeholders = fmt.Sprintf("%s, ?", placeholders)
-	}
-
-	// The export can contain duplicates, hence the UPSERT instead of a plain INSERT.
-	w.query = fmt.Sprintf(
-		`insert into %s (%s) values (%s) on conflict (%s) do nothing;`,
-		td.Element, columns, placeholders, td.Primary)
-
-	return nil
+	return w.updateInsertStatement()
 }
 
 // LeaveTable implements Recorder.
@@ -159,11 +147,56 @@ func (w *SqliteWriter) LeaveFile() error {
 
 // Record implements Recorder.
 func (w *SqliteWriter) Record(item map[string]string) error {
+	type newColumn struct {
+		name string
+		typ  string
+	}
+	additions := make([]newColumn, 0)
+	for name := range item {
+		added, typ := w.fields.EnsureField(name, "")
+		if added {
+			additions = append(additions, newColumn{name: name, typ: typ})
+		}
+	}
+	for _, col := range additions {
+		stmt := fmt.Sprintf(`alter table "%s" add column "%s" %s`, w.td.Element, col.name, col.typ)
+		if err := sqlitex.Exec(w.conn, stmt, nil); err != nil {
+			return fmt.Errorf("failed to add column %s: %w", col.name, err)
+		}
+	}
+	if len(additions) > 0 {
+		if err := w.updateInsertStatement(); err != nil {
+			return err
+		}
+	}
+
 	rec, err := w.fields.Record(item)
 	if err != nil {
 		return fmt.Errorf("failed to write record: %w", err)
 	}
 	return sqlitex.Exec(w.conn, w.query, nil, rec...)
+}
+
+func (w *SqliteWriter) updateInsertStatement() error {
+	headers := w.fields.Header()
+	if len(headers) == 0 {
+		return fmt.Errorf("no fields configured")
+	}
+	columns := make([]string, len(headers))
+	placeholders := make([]string, len(headers))
+	for i, header := range headers {
+		columns[i] = fmt.Sprintf("\"%s\"", header)
+		placeholders[i] = "?"
+	}
+
+	w.query = fmt.Sprintf(
+		`insert into "%s" (%s) values (%s) on conflict ("%s") do nothing;`,
+		w.td.Element,
+		strings.Join(columns, ", "),
+		strings.Join(placeholders, ", "),
+		w.td.Primary,
+	)
+	return nil
 }
 
 // Close implements io.Closer.

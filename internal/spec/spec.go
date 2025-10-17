@@ -22,16 +22,19 @@ type Field struct {
 }
 
 type Table struct {
-	Root         string  `yaml:"root"`
-	Element      string  `yaml:"element"`
-	Primary      string  `yaml:"primary"`
-	WithoutRowId bool    `yaml:"without_rowid"`
-	Fields       []Field `yaml:"fields"`
+	Root           string   `yaml:"root"`
+	RootAliases    []string `yaml:"root_aliases"`
+	Element        string   `yaml:"element"`
+	ElementAliases []string `yaml:"element_aliases"`
+	Primary        string   `yaml:"primary"`
+	WithoutRowId   bool     `yaml:"without_rowid"`
+	Prefixes       []string `yaml:"prefixes"`
+	Fields         []Field  `yaml:"fields"`
 }
 
 type ExportDescriptor struct {
-	Prefix string
-	Table  Table
+	Prefixes []string
+	Table    Table
 }
 
 func DecodeTable(fileName string) (*Table, error) {
@@ -95,9 +98,17 @@ func DecodeExport(fileName string) ([]ExportDescriptor, error) {
 		if err != nil {
 			return export, err
 		}
+		basePrefix := strings.TrimSuffix(descriptorFileName, ".yaml")
+		prefixes := []string{basePrefix}
+		for _, p := range table.Prefixes {
+			if p == "" {
+				continue
+			}
+			prefixes = append(prefixes, p)
+		}
 		export = append(export, ExportDescriptor{
-			Prefix: strings.TrimSuffix(descriptorFileName, ".yaml"),
-			Table:  *table,
+			Prefixes: prefixes,
+			Table:    *table,
 		})
 	}
 	return export, nil
